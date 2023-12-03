@@ -1,5 +1,0 @@
----
-- hosts: myservers
-  roles:
-    - project1
-  gather_facts: yes
