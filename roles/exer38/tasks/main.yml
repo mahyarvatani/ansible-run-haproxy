@@ -1,0 +1,131 @@
+---
+- name: install firewalld & nsf-utils on centos
+  yum:
+    name: "{{item}}"
+    state: present
+  loop:
+    - firewalld
+    - nfs-utils
+  when: ansible_os_family=="RedHat"
+  tags: install_firewalld_nfs_centos
+
+- name: install firewalld & nsf-utils on ubuntu
+  apt:
+    name: "{{item}}"
+    state: present
+  loop:
+    - firewalld
+    - nfs-common
+  when: ansible_os_family=="Debian"
+  tags: install_firewalld_nfs_ubuntu
+
+- name: start & enable services on centos
+  service:
+    name: "{{item}}"
+    state: started
+    enabled: true
+  loop:
+    - firewalld.service
+    - nfs-server.service
+  when: ansible_os_family=="RedHat"
+  tags: start_enable_services
+
+- name: start & enable services on ubuntu
+  service:
+    name: "{{item}}"
+    state: started
+    enabled: true
+  loop:
+    - firewalld.service
+  when: ansible_os_family=="Debian"
+  tags: start_enable_services
+
+- name: open ports in firewalld
+  firewalld:
+    service: "{{item}}"
+    permanent: yes
+    immediate: yes
+    state: enabled
+    zone: public
+  loop:
+    - ssh
+    - nfs
+  tags: open_ports
+
+- name: create nfs group
+  group:
+    name: nfsnobody
+    state: present
+  tags: create_data1
+
+- name: hash password
+  set_fact:
+    password1: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          64363966333239366534316661313232626239336638303463323261616434306132353434363730
+          6163633337346363373839346132373633643063373962370a313161313832336563643633616130
+          66303265303732323930613138636436346539626133353533613538316230613639343461623434
+          6636643839663364370a303238373930306462333832643034373633623831313536306664376634
+          6462
+  tags: create_data1
+
+- name: create nfs user
+  user:
+    name: nfsnobody
+    password: "{{password1 | string | password_hash('sha512')}}"
+    shell: "/bin/nologin"
+    groups:
+      - nfsnobody
+    state: present
+  tags: create_data1
+
+- name: create dir & change permission
+  file:
+    path: /data1
+    state: directory
+    owner: nfsnobody
+    group: nfsnobody
+    mode: 0755
+  tags: create_data1
+
+- name: touch /etc/exports even if it doesnt exist
+  file:
+    path: /etc/exports
+    state: touch
+    access_time: preserve
+  tags: nfs_config
+
+- name: config nfs server
+  lineinfile:
+    path: /etc/exports
+    line: "/data1 192.168.56.102(rw,sync,no_root_squash,no_subtree_check)\n/data1 192.168.56.105(rw,sync,no_root_squash,no_subtree_check)"
+    state: present
+    backup: yes
+  when: (ansible_all_ipv4_addresses[0] in nfs_server) or (ansible_all_ipv4_addresses[1] in nfs_server)
+  tags: nfs_config
+
+- name: config nfs client
+  lineinfile:
+    path: /etc/exports
+    line: "/data1 192.168.56.101(rw,sync,no_root_squash,no_subtree_check)"
+    state: present
+    backup: yes
+  when: ((ansible_all_ipv4_addresses[0] not in nfs_server) and (ansible_all_ipv4_addresses[1] not in nfs_server))
+  tags: nfs_config
+ 
+- name: config nfs nodes
+  shell: " exportfs -arv"
+  tags: nfs_config
+
+- name: mount nfs clients
+  mount:
+    src: "{{nfs_server[0]}}:/data1"
+    path: "/data1"
+    opts: rw,sync,hard,intr
+    state: mounted
+    fstype: nfs
+  when: ((ansible_all_ipv4_addresses[0] not in nfs_server) and (ansible_all_ipv4_addresses[1] not in nfs_server))
+  tags: nfs_mount
+
+
+
