@@ -1,0 +1,105 @@
+---
+- name: install nginx on redhat
+  yum:
+    name: nginx
+    state: present
+  when: server_role == "nginx" and ansible_os_family == "RedHat"
+  tags: install_nginx_redhat
+
+- name: install nginx on ubuntu
+  apt:
+    name: nginx
+    state: present
+  when: server_role == "nginx" and ansible_os_family == "Debian"
+  tags: install_nginx_ubuntu
+
+- name: Add port to firewall
+  firewalld:
+    port: "80/tcp"
+    state: enabled
+    zone: "public"
+    immediate: true
+    permanent: true
+  when: ansible_os_family == "RedHat"
+  tags: open_nginx_port
+
+- name: add port to ufw
+  ufw:
+    rule: allow
+    port: "80"
+    proto: tcp
+  when: ansible_os_family == "Debian"
+  tags: open_nginx_port
+
+- name: copy index.html
+  template:
+    src: index.html.j2
+    dest: /usr/share/nginx/html/index.html
+  when: server_role == "nginx" and ansible_os_family == "RedHat"
+  tags: write_msg
+
+- name: copy index.html
+  template:
+    src: index.html.j2
+    dest: /var/www/html/index.nginx-debian.html
+  when: server_role == "nginx" and ansible_os_family == "Debian"
+  tags: write_msg
+
+- name: write message in index.html
+  lineinfile:
+    path: /usr/share/nginx/html/index.html
+    insertafter: "<title>Welcome to nginx!</title>"
+    line: "<h1>ip {{ip_address}} </h1>"
+    state: present
+  when: server_role == "nginx" and ansible_os_family == "RedHat"
+  tags: write_msg
+
+- name: write message in index.html
+  lineinfile:
+    path: /var/www/html/index.nginx-debian.html
+    insertafter: "<title>Welcome to nginx!</title>"
+    line: "<h1>ip {{ip_address}} </h1>"
+    state: present
+  when: server_role == "nginx" and ansible_os_family == "Debian"
+  tags: write_msg
+
+- name: restart nginx service
+  service:
+    name: nginx
+    state: restarted
+  when: server_role == "nginx"
+  tags: write_msg
+
+- name: install haproxy
+  yum:
+    name: haproxy
+    state: present
+  when: server_role == "haproxy"
+  tags: install_ha
+
+- name: copy index.html
+  template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+  when: server_role == "haproxy"
+  tags: config_ha
+
+- name: Add haproxy monitoring port to firewall
+  firewalld:
+    port: "8404/tcp"
+    state: enabled
+    zone: "public"
+    immediate: true
+    permanent: true
+  when: server_role == "haproxy"
+  tags: open_mon_port
+
+
+
+- name: start haproxy service
+  service:
+    name: haproxy
+    state: restarted
+    enabled: true 
+  when: server_role == "haproxy"
+  tags: start_ha
