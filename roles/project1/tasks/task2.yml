@@ -1,5 +1,0 @@
----
-- name: hello from task2.yml
-  debug:
-    msg: "hello from task2.yml"
-  tags: hello_task2
